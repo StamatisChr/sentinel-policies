@@ -1,39 +1,65 @@
 import "tfconfig/v2" as tfconfig
 import "tfrun"
 
-# --- Fetch values safely ---
-change_id_var        = tfconfig.variables["CHANGE_ID"] else null
-google_providers     = tfconfig.providers.google else []
-tfrun_change_id      = tfrun.variables["CHANGE_ID"] else ""
-
-# --- Debug prints ---
 print("---- Sentinel Debug Output ----")
 
-print("CHANGE_ID variable defined in config:", change_id_var is not null)
-
-if change_id_var is not null {
-  has_default = "default" in change_id_var
-  default_val = has_default ? change_id_var.default : "NO DEFAULT"
-
-  print("CHANGE_ID has default:", has_default)
-  print("CHANGE_ID default value:", default_val)
+# --- Safely load CHANGE_ID from config ---
+change_id_var = null
+if "CHANGE_ID" in tfconfig.variables {
+  change_id_var = tfconfig.variables["CHANGE_ID"]
 }
 
-print("CHANGE_ID runtime value (tfrun):", tfrun_change_id)
+print("CHANGE_ID defined in config:", change_id_var is not null)
 
-# --- Provider inspection ---
+# --- Check default value safely ---
+has_default = false
+default_val = "NO DEFAULT"
+
+if change_id_var is not null {
+  if "default" in change_id_var {
+    has_default = true
+    default_val = change_id_var.default
+  }
+}
+
+print("CHANGE_ID has default:", has_default)
+print("CHANGE_ID default value:", default_val)
+
+# --- Safely load runtime variable ---
+tfrun_change_id = ""
+if "CHANGE_ID" in tfrun.variables {
+  tfrun_change_id = tfrun.variables["CHANGE_ID"]
+}
+
+print("CHANGE_ID runtime value:", tfrun_change_id)
+
+# --- Safely load google providers ---
+google_providers = []
+if "google" in tfconfig.providers {
+  google_providers = tfconfig.providers.google
+}
+
 provider_has_request_reason = false
 
-for google_providers as p {
-  has_rr = "request_reason" in p.config
-  rr_val = has_rr ? p.config.request_reason : "NOT SET"
+for p in google_providers {
 
-  print("Found google provider block")
+  has_rr = false
+
+  if "request_reason" in p.config {
+    has_rr = true
+  }
+
+  print("Found google provider")
   print("  request_reason present:", has_rr)
-  print("  request_reason value:", rr_val)
 
   if has_rr {
-    provider_has_request_reason = true
+    print("  request_reason value:", p.config.request_reason)
+
+    if p.config.request_reason is not "" {
+      provider_has_request_reason = true
+    }
+  } else {
+    print("  request_reason value: NOT SET")
   }
 }
 
@@ -45,7 +71,7 @@ change_id_exists = rule {
 change_id_not_empty_config = rule {
   change_id_exists and (
     not ("default" in change_id_var) or
-    change_id_var.default is not ""
+    ("default" in change_id_var and change_id_var.default is not "")
   )
 }
 
@@ -57,7 +83,7 @@ google_provider_has_request_reason = rule {
   provider_has_request_reason
 }
 
-# --- Final decision with explanation ---
+# --- Final rule ---
 main = rule {
   print("---- Evaluation Results ----")
   print("change_id_exists:", change_id_exists)
