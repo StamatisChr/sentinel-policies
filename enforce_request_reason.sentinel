@@ -3,69 +3,52 @@ import "tfrun"
 
 print("---- Sentinel Debug Output ----")
 
-# --- CHANGE_ID from config ---
+# --- Check CHANGE_ID exists in config ---
 change_id_exists = "CHANGE_ID" in tfconfig.variables
 print("CHANGE_ID exists in config:", change_id_exists)
 
-change_id_has_default = false
-change_id_default_not_empty = true
+# --- Get runtime value ---
+tfrun_change_id = null
 
-if change_id_exists {
-  if "default" in tfconfig.variables["CHANGE_ID"] {
-    change_id_has_default = true
-    default_val = tfconfig.variables["CHANGE_ID"].default
-
-    print("CHANGE_ID default value:", default_val)
-
-    if default_val is "" {
-      change_id_default_not_empty = false
-    }
-  } else {
-    print("CHANGE_ID has no default")
-  }
-}
-
-# --- Runtime արժեք ---
-tfrun_change_id = ""
 if "CHANGE_ID" in tfrun.variables {
-  tfrun_change_id = tfrun.variables["CHANGE_ID"]
+  if "value" in tfrun.variables["CHANGE_ID"] {
+    tfrun_change_id = tfrun.variables["CHANGE_ID"].value
+  }
 }
 
 print("CHANGE_ID runtime value:", tfrun_change_id)
 
-change_id_runtime_not_empty = tfrun_change_id is not ""
+# --- Runtime validation ONLY (ignore default completely) ---
+change_id_runtime_valid = (
+  tfrun_change_id is not null and
+  tfrun_change_id is not ""
+)
 
-# --- Google provider check ---
+# --- Provider check ---
 google_provider_has_request_reason = false
 
 if "google" in tfconfig.providers {
-
   for tfconfig.providers.google as p {
 
     has_rr = "request_reason" in p.config
-
-    print("Found google provider")
-    print("  request_reason present:", has_rr)
+    print("Found google provider - request_reason present:", has_rr)
 
     if has_rr {
       rr_val = p.config.request_reason
       print("  request_reason value:", rr_val)
 
-      if rr_val is not "" {
+      if rr_val is not null and rr_val is not "" {
         google_provider_has_request_reason = true
       }
-    } else {
-      print("  request_reason value: NOT SET")
     }
   }
 } else {
   print("No google provider found")
 }
 
-# --- Final rule (NO prints inside) ---
+# --- Final rule ---
 main = rule {
   change_id_exists and
-  change_id_default_not_empty and
-  change_id_runtime_not_empty and
+  change_id_runtime_valid and
   google_provider_has_request_reason
 }
