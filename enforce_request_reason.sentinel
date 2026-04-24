@@ -1,42 +1,51 @@
 import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
 
-# 1. Setup
-change_id = tfplan.variables["CHANGE_ID"].value else "MISSING"
-run_id    = tfrun.id
-expected  = run_id + " " + change_id
+# 1. Setup - Fetch the actual IDs
+actual_run_id = tfrun.id
+actual_change_id = tfplan.variables["CHANGE_ID"].value else "MISSING"
+expected_resolved = actual_run_id + " " + actual_change_id
+expected_literal  = "${TFE_RUN_ID} ${CHANGE_ID}"
 
-print("DEBUG: Target Value: '" + expected + "'")
+print("--- DEBUG START ---")
+print("Werkelijke Run ID:  " + actual_run_id)
+print("Werkelijke Change:  " + actual_change_id)
+print("Verwachte string:   " + expected_resolved)
+print("--- VARIABLES CHECK ---")
 
-# 2. Direct Value Validation
-validate_env = func() {
-    
-    # We use a boolean flag to track if we find a match anywhere
-    matched = false
+validate = func() {
+    found_var = false
+    match_found = false
 
-    # We iterate through all variables. 
-    # To avoid the 'undefined' error, we use 'else' on every property access.
     for tfrun.variables as _, v {
-        val = v.value else "HIDDEN_OR_UNDEFINED"
-        cat = v.category else "unknown"
+        key = v.key else "unknown"
+        val = v.value else "unknown"
         
-        # If we find our expected string in an environment variable, we succeed
-        if cat == "env" and val == expected {
-            matched = true
-            break
+        # Print every env var so we can see what TFE is doing
+        if v.category == "env" {
+            print("Gevonden Env Var -> " + key + ": " + val)
+        }
+
+        if v.key == "CLOUDSDK_CORE_REQUEST_REASON" and v.category == "env" {
+            found_var = true
+            # Check if it matches the resolved IDs OR the literal placeholders
+            if val == expected_resolved or val == expected_literal {
+                match_found = true
+                print("RESULTAAT: Match gevonden!")
+            } else {
+                print("RESULTAAT: Waarde mismatch voor " + key)
+            }
         }
     }
 
-    if matched {
-        print("SUCCES: Match gevonden voor '" + expected + "'")
-        return true
-    } else {
-        print("FOUT: Geen enkele omgevingsvariabele komt overeen met de verwachte waarde.")
-        print("Tip: Zorg dat CLOUDSDK_CORE_REQUEST_REASON exact '" + expected + "' is.")
+    if not found_var {
+        print("FOUT: CLOUDSDK_CORE_REQUEST_REASON is niet aanwezig in de workspace.")
         return false
     }
+
+    return match_found
 }
 
 main = rule {
-    validate_env()
+    validate()
 }
