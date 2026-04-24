@@ -1,31 +1,38 @@
 import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
+import "strings"
 
-# 1. Capture CHANGE_ID
+# 1. Check CHANGE_ID
 change_id = tfplan.variables.CHANGE_ID.value else ""
-
-# 2. Validation Rule
-# We use 'is' for all comparisons because it handles 'undefined' safely
-request_reason_exists = rule {
-    any tfrun.variables as _, v {
-        (v.category else "") is "env" and 
-        (v.key else "") is "CLOUDSDK_CORE_REQUEST_REASON"
-    }
-}
-
 change_id_is_valid = rule {
     change_id is not ""
 }
 
+# 2. Check Environment Variable
+# We look for the key specifically, but we make it case-insensitive 
+# and strip potential whitespace to be 100% sure.
+request_reason_exists = rule {
+    any tfrun.variables as _, v {
+        v.category is "env" and 
+        strings.to_upper(strings.trim(v.key else "", " ")) is "CLOUDSDK_CORE_REQUEST_REASON"
+    }
+}
+
 # 3. Main Rule
-# 'is true' ensures a boolean result and prevents 'undefined' errors
 main = rule {
     (change_id_is_valid and request_reason_exists) is true
 }
 
 # 4. English status prints
-print("Requirement 1: CHANGE_ID exists and is not empty...")
-print("Result: " + string(change_id_is_valid))
+print("Requirement 1 (CHANGE_ID): " + string(change_id_is_valid))
+print("Requirement 2 (Env Var):   " + string(request_reason_exists))
 
-print("Requirement 2: Env var 'CLOUDSDK_CORE_REQUEST_REASON' exists...")
-print("Result: " + string(request_reason_exists))
+# Extra Debugging: If it fails, show what keys ARE visible
+if not request_reason_exists {
+    print("DEBUG: Sentinel could not find the exact key. Visible Env Keys are:")
+    for tfrun.variables as _, v {
+        if v.category is "env" {
+            print("  - " + (v.key else "HIDDEN/SENSITIVE"))
+        }
+    }
+}
