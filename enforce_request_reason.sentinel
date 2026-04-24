@@ -10,9 +10,9 @@ expected_reason = tfrun.id + " " + change_id
 
 # 3. Validation Logic
 validate_env_config = func() {
-    # Ensure CHANGE_ID isn't the default or empty
+    # Check if CHANGE_ID is valid
     if change_id == "" or change_id == "blabla" {
-        print("FOUT: De CHANGE_ID variabele is niet correct ingesteld.")
+        print("FOUT: CHANGE_ID is missing, empty, or still set to 'blabla'. Please update the workspace variable.")
         return false
     }
 
@@ -23,22 +23,21 @@ validate_env_config = func() {
             if v.value == expected_reason {
                 found_correct_env = true
             } else {
-                print("FOUT: CLOUDSDK_CORE_REQUEST_REASON mismatch.")
-                print("Verwacht: '" + expected_reason + "'")
-                print("Gekregen: '" + v.value + "'")
+                print("FOUT: Value mismatch.")
+                print("Expected: '" + expected_reason + "'")
+                print("Actual:   '" + v.value + "'")
             }
         }
     }
 
     if not found_correct_env {
-        print("FOUT: De omgevingsvariabele CLOUDSDK_CORE_REQUEST_REASON ontbreekt of is onjuist.")
+        print("FOUT: Environment variable 'CLOUDSDK_CORE_REQUEST_REASON' is missing or formatted incorrectly.")
         return false
     }
 
     return true
 }
 
-# Main enforcement
 main = rule {
     validate_env_config()
 }
