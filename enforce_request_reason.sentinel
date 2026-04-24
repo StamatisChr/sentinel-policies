@@ -1,81 +1,72 @@
-import "tfplan/v2" as tfplan
+import "tfconfig/v2" as tfconfig
+import "tfrun"
 
-# 1. Helper function to scan modules recursively for the google provider
-find_google_providers = func(module) {
-    found_providers = []
-    
-    # Check providers in the current module
-    for module.providers as _, p {
-        if p.name == "google" or p.name == "google-beta" {
-            append(found_providers, p)
-        }
-    }
-    
-    # Check sub-modules recursively
-    for module.module_calls as _, mc {
-        found_providers = found_providers + find_google_providers(mc.module)
-    }
-    
-    return found_providers
+# --- Fetch values safely ---
+change_id_var        = tfconfig.variables["CHANGE_ID"] else null
+google_providers     = tfconfig.providers.google else []
+tfrun_change_id      = tfrun.variables["CHANGE_ID"] else ""
+
+# --- Debug prints ---
+print("---- Sentinel Debug Output ----")
+
+print("CHANGE_ID variable defined in config:", change_id_var is not null)
+
+if change_id_var is not null {
+  has_default = "default" in change_id_var
+  default_val = has_default ? change_id_var.default : "NO DEFAULT"
+
+  print("CHANGE_ID has default:", has_default)
+  print("CHANGE_ID default value:", default_val)
 }
 
-# 2. Validation Logic
-validate_config = func() {
-    print("DEBUG: Starting Universal Search for Google Providers...")
-    
-    # Get CHANGE_ID for validation
-    change_id = tfplan.variables.CHANGE_ID.value else ""
-    if change_id == "" {
-        print("FOUT: CHANGE_ID variable is missing or empty.")
-        return false
-    }
+print("CHANGE_ID runtime value (tfrun):", tfrun_change_id)
 
-    # Locate all providers across the whole tree
-    all_providers = find_google_providers(tfplan.configuration.root_module)
-    print("DEBUG: Total Google providers found: " + string(length(all_providers)))
+# --- Provider inspection ---
+provider_has_request_reason = false
 
-    if length(all_providers) == 0 {
-        print("FOUT: No Google provider blocks found in root or modules.")
-        return false
-    }
+for google_providers as p {
+  has_rr = "request_reason" in p.config
+  rr_val = has_rr ? p.config.request_reason : "NOT SET"
 
-    all_valid = true
+  print("Found google provider block")
+  print("  request_reason present:", has_rr)
+  print("  request_reason value:", rr_val)
 
-    for all_providers as p {
-        print("DEBUG: Checking provider: " + p.name)
-        
-        # Check if request_reason exists
-        if (p.expressions.request_reason) is defined {
-            # Instead of a literal check, we check the 'references' 
-            # This proves the code is using the variables, regardless of strings
-            refs = p.expressions.request_reason.references else []
-            print("DEBUG: References found in request_reason: " + string(refs))
-            
-            has_run_id = false
-            has_change_id = false
-            
-            for refs as r {
-                if r contains "var.TFE_RUN_ID" { has_run_id = true }
-                if r contains "var.CHANGE_ID"   { has_change_id = true }
-            }
-
-            if has_run_id and has_change_id {
-                print("SUCCES: request_reason is correctly linked to variables.")
-            } else {
-                print("FOUT: request_reason is missing required variable references.")
-                print("Required: var.TFE_RUN_ID AND var.CHANGE_ID")
-                all_valid = false
-            }
-        } else {
-            print("FOUT: 'request_reason' is NOT defined in this provider block.")
-            all_valid = false
-        }
-    }
-
-    return all_valid
+  if has_rr {
+    provider_has_request_reason = true
+  }
 }
 
-# 3. Main Rule
+# --- Rules ---
+change_id_exists = rule {
+  change_id_var is not null
+}
+
+change_id_not_empty_config = rule {
+  change_id_exists and (
+    not ("default" in change_id_var) or
+    change_id_var.default is not ""
+  )
+}
+
+change_id_not_empty_runtime = rule {
+  tfrun_change_id is not ""
+}
+
+google_provider_has_request_reason = rule {
+  provider_has_request_reason
+}
+
+# --- Final decision with explanation ---
 main = rule {
-    validate_config()
+  print("---- Evaluation Results ----")
+  print("change_id_exists:", change_id_exists)
+  print("change_id_not_empty_config:", change_id_not_empty_config)
+  print("change_id_not_empty_runtime:", change_id_not_empty_runtime)
+  print("google_provider_has_request_reason:", google_provider_has_request_reason)
+
+  change_id_exists and
+  change_id_not_empty_config and
+  change_id_not_empty_runtime and
+  google_provider_has_request_reason
 }
