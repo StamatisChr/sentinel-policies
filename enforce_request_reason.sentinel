@@ -1,38 +1,54 @@
-import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
-import "strings"
 
-# 1. Check CHANGE_ID
-change_id = tfplan.variables.CHANGE_ID.value else ""
-change_id_is_valid = rule {
-    change_id is not ""
-}
-
-# 2. Check Environment Variable
-# We look for the key specifically, but we make it case-insensitive 
-# and strip potential whitespace to be 100% sure.
-request_reason_exists = rule {
-    any tfrun.variables as _, v {
-        v.category is "env" and 
-        strings.to_upper(strings.trim(v.key else "", " ")) is "CLOUDSDK_CORE_REQUEST_REASON"
+# 1. Validation Logic
+validate_configuration = func() {
+    
+    # Check if CHANGE_ID is provided and not empty
+    change_id = tfplan.variables.CHANGE_ID.value else ""
+    if change_id == "" {
+        print("FOUT: The variable 'CHANGE_ID' is empty or missing.")
+        return false
     }
-}
 
-# 3. Main Rule
-main = rule {
-    (change_id_is_valid and request_reason_exists) is true
-}
+    # Target string to look for in the provider block
+    expected_value = "${TFE_RUN_ID} ${var.CHANGE_ID}"
+    
+    found_provider = false
+    valid_request_reason = false
 
-# 4. English status prints
-print("Requirement 1 (CHANGE_ID): " + string(change_id_is_valid))
-print("Requirement 2 (Env Var):   " + string(request_reason_exists))
-
-# Extra Debugging: If it fails, show what keys ARE visible
-if not request_reason_exists {
-    print("DEBUG: Sentinel could not find the exact key. Visible Env Keys are:")
-    for tfrun.variables as _, v {
-        if v.category is "env" {
-            print("  - " + (v.key else "HIDDEN/SENSITIVE"))
+    # Iterate through provider configurations
+    # We check both 'google' and 'google-beta'
+    for tfplan.configuration.providers as _, p {
+        if p.name == "google" or p.name == "google-beta" {
+            found_provider = true
+            
+            # Check if request_reason attribute exists
+            # We use 'is defined' to prevent 'undefined' crashes
+            if (p.expressions.request_reason) is defined {
+                actual_value = p.expressions.request_reason.constant_value else ""
+                
+                if actual_value == expected_value {
+                    valid_request_reason = true
+                } else {
+                    print("FOUT: The 'request_reason' in provider '" + p.name + "' is incorrect.")
+                    print("Verwacht: " + expected_value)
+                    print("Gekregen: " + actual_value)
+                }
+            } else {
+                print("FOUT: The 'request_reason' attribute is missing from the '" + p.name + "' provider block.")
+            }
         }
     }
+
+    if not found_provider {
+        print("FOUT: No Google provider found in the configuration.")
+        return false
+    }
+
+    return valid_request_reason
+}
+
+# 2. Main Rule
+main = rule {
+    validate_configuration()
 }
