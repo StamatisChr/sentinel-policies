@@ -1,43 +1,46 @@
 import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
-import "strings"
 
-# 1. Get the change_id from the plan variables
-change_id = tfplan.variables.change_id.value else ""
+# 1. Capture the variables
+# We use 'else' to handle cases where the variable might be missing entirely
+change_id = tfplan.variables.CHANGE_ID.value else "MISSING"
 
-# 2. Construct the exact expected string
-expected_reason = tfrun.id + " " + change_id
+# 2. Construct the expectation
+# This is what the environment variable MUST look like
+expected_value = tfrun.id + " " + change_id
 
-# 3. Validation Logic
-validate_env_config = func() {
-    # Check if change_id is valid
-    if change_id == "" or change_id == "blabla" {
-        print("FOUT: change_id is missing, empty, or still set to 'blabla'. Please update the workspace variable.")
+# 3. Main Logic
+validate_request_reason = func() {
+    
+    # First, check if CHANGE_ID was actually provided
+    if change_id == "MISSING" or change_id == "blabla" {
+        print("FOUT: The Terraform variable 'CHANGE_ID' is missing or set to the default 'blabla'.")
         return false
     }
 
-    found_correct_env = false
-    
+    # Second, check the environment variables in the TFE Workspace
+    found_env_var = false
     for tfrun.variables as _, v {
         if v.category == "env" and v.key == "CLOUDSDK_CORE_REQUEST_REASON" {
-            if v.value == expected_reason {
-                found_correct_env = true
-            } else {
-                print("FOUT: Value mismatch.")
-                print("Expected: '" + expected_reason + "'")
-                print("Actual:   '" + v.value + "'")
+            found_env_var = true
+            if v.value != expected_value {
+                print("FOUT: Environment variable mismatch!")
+                print("Expected: " + expected_reason)
+                print("Actual:   " + v.value)
+                return false
             }
         }
     }
 
-    if not found_correct_env {
-        print("FOUT: Environment variable 'CLOUDSDK_CORE_REQUEST_REASON' is missing or formatted incorrectly.")
+    if not found_env_var {
+        print("FOUT: Environment variable 'CLOUDSDK_CORE_REQUEST_REASON' was not found in the workspace.")
         return false
     }
 
     return true
 }
 
+# Main enforcement rule
 main = rule {
-    validate_env_config()
+    validate_request_reason()
 }
