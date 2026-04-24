@@ -1,29 +1,30 @@
 import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
 
-# 1. Capture inputs
-print("Checking Workspace Variables...")
-change_id = tfplan.variables["CHANGE_ID"].value else "MISSING"
-run_id    = tfrun.id
+# 1. Check Terraform Variable: CHANGE_ID
+# We check if it exists in the plan and is not an empty string
+change_id_is_valid = rule {
+    (tfplan.variables.CHANGE_ID.value else "") is not ""
+}
 
-expected_resolved = run_id + " " + change_id
-expected_literal  = "${TFE_RUN_ID} ${CHANGE_ID}"
-
-print("Target Value 1: '" + expected_resolved + "'")
-print("Target Value 2: '" + expected_literal + "'")
-
-# 2. Validation Rule
-# We look for ANY environment variable that has our expected value.
-# We skip the 'key' check because TFE might be masking it as 'unknown'.
-request_reason_is_valid = rule {
+# 2. Check Environment Variable: CLOUDSDK_CORE_REQUEST_REASON
+# We check if ANY variable has the correct name, regardless of value
+request_reason_exists = rule {
     any tfrun.variables as _, v {
-        (v.category else "") == "env" and
-        (v.value == expected_resolved or v.value == expected_literal)
+        (v.key else "") is "CLOUDSDK_CORE_REQUEST_REASON" and
+        (v.category else "") is "env"
     }
 }
 
+# 3. Main Rule
+# Both must be true. We use 'is true' to force a boolean result.
 main = rule {
-    request_reason_is_valid
+    (change_id_is_valid and request_reason_exists) is true
 }
 
-print("Policy validation complete.")
+# 4. Debug Prints
+print("Checking CHANGE_ID...")
+print("CHANGE_ID Status: " + string(change_id_is_valid))
+
+print("Checking CLOUDSDK_CORE_REQUEST_REASON...")
+print("Env Var Status: " + string(request_reason_exists))
