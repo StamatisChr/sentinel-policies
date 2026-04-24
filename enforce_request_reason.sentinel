@@ -41,7 +41,7 @@ if "google" in tfconfig.providers {
 
 provider_has_request_reason = false
 
-for p in google_providers {
+for google_providers as p {
 
   has_rr = false
 
