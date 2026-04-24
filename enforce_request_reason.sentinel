@@ -3,12 +3,20 @@ import "tfrun"
 
 print("---- Sentinel Debug Output ----")
 
-# --- Check CHANGE_ID exists in config ---
-change_id_exists = "CHANGE_ID" in tfconfig.variables
+# -------------------------
+# CHANGE_ID existence (config)
+# -------------------------
+change_id_exists = false
+if "CHANGE_ID" in tfconfig.variables {
+  change_id_exists = true
+}
+
 print("CHANGE_ID exists in config:", change_id_exists)
 
-# --- Get runtime value ---
-tfrun_change_id = null
+# -------------------------
+# Runtime value (ONLY value, no default)
+# -------------------------
+tfrun_change_id = ""
 
 if "CHANGE_ID" in tfrun.variables {
   if "value" in tfrun.variables["CHANGE_ID"] {
@@ -18,37 +26,43 @@ if "CHANGE_ID" in tfrun.variables {
 
 print("CHANGE_ID runtime value:", tfrun_change_id)
 
-# --- Runtime validation ONLY (ignore default completely) ---
-change_id_runtime_valid = (
-  tfrun_change_id is not null and
-  tfrun_change_id is not ""
-)
+change_id_runtime_valid = false
+if tfrun_change_id is not "" {
+  change_id_runtime_valid = true
+}
 
-# --- Provider check ---
+# -------------------------
+# Google provider check
+# -------------------------
 google_provider_has_request_reason = false
 
 if "google" in tfconfig.providers {
+
   for tfconfig.providers.google as p {
 
-    has_rr = "request_reason" in p.config
-    print("Found google provider - request_reason present:", has_rr)
+    has_rr = false
+    if "request_reason" in p.config {
+      has_rr = true
+    }
+
+    print("google provider request_reason present:", has_rr)
 
     if has_rr {
       rr_val = p.config.request_reason
-      print("  request_reason value:", rr_val)
+      print("request_reason value:", rr_val)
 
-      if rr_val is not null and rr_val is not "" {
+      if rr_val is not "" {
         google_provider_has_request_reason = true
       }
     }
   }
-} else {
-  print("No google provider found")
 }
 
-# --- Final rule ---
+# -------------------------
+# FINAL RULE (NO MULTILINE EXPRESSIONS)
+# -------------------------
 main = rule {
-  change_id_exists and
-  change_id_runtime_valid and
-  google_provider_has_request_reason
+  change_id_exists
+  and change_id_runtime_valid
+  and google_provider_has_request_reason
 }
