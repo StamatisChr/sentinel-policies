@@ -1,69 +1,48 @@
 import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
 
-# 1. Capture and print the inputs
-print("STAP 1: Ophalen van variabelen...")
+# 1. Setup
+change_id = tfplan.variables["CHANGE_ID"].value else "MISSING"
+run_id    = tfrun.id
+expected  = run_id + " " + change_id
 
-# Safe check for CHANGE_ID
-change_id = tfplan.variables["CHANGE_ID"].value else "UNDEFINED_IN_PLAN"
-print("DEBUG: CHANGE_ID uit tfplan is: '" + change_id + "'")
+print("DEBUG: Target Value: '" + expected + "'")
 
-# Capture TFE Run ID
-run_id = tfrun.id
-print("DEBUG: TFE_RUN_ID uit tfrun is: '" + run_id + "'")
-
-# Construct expected string
-expected_value = run_id + " " + change_id
-print("DEBUG: Verwachte waarde voor request_reason: '" + expected_value + "'")
-
-# 2. Validation Function
-validate_config = func() {
-    print("STAP 2: Controleren van CHANGE_ID waarde...")
-    if change_id == "UNDEFINED_IN_PLAN" or change_id == "" or change_id == "blabla" {
-        print("FOUT: CHANGE_ID is niet correct (leeg of standaardwaarde).")
-        return false
-    }
-    print("CHECK: CHANGE_ID is valide.")
-
-    print("STAP 3: Doorlopen van omgevingsvariabelen...")
-    found_var = false
-    
-    for tfrun.variables as k, v {
-        # Using 'else' to avoid the 'undefined' error during comparison
-        current_key = v.key else "unknown"
-        current_cat = v.category else "unknown"
-        current_val = v.value else "unknown"
-
-        # Log every environment variable found (optional, helps find typos)
-        if current_cat == "env" {
-            print("  - Gevonden env var: " + current_key + " = " + current_val)
-        }
-
-        if current_cat == "env" and current_key == "CLOUDSDK_CORE_REQUEST_REASON" {
-            found_var = true
-            print("STAP 4: Vergelijken van CLOUDSDK_CORE_REQUEST_REASON...")
-            
-            if current_val == expected_value {
-                print("SUCCES: Waarde komt exact overeen!")
-                return true
-            } else {
-                print("FOUT: Waarde komt NIET overeen.")
-                print("  Verwacht: '" + expected_value + "'")
-                print("  Gekregen: '" + current_val + "'")
-                return false
-            }
-        }
-    }
-
-    if not found_var {
-        print("FOUT: De variabele 'CLOUDSDK_CORE_REQUEST_REASON' is helemaal niet gevonden.")
-        return false
-    }
-    
-    return false
+# 2. Filter for the specific environment variable
+# This avoids the loop issues caused by other sensitive variables
+request_reason_vars = filter tfrun.variables as _, v {
+    v.key is "CLOUDSDK_CORE_REQUEST_REASON" and v.category is "env"
 }
 
-# Main enforcement
+# 3. Validation Logic
+validate_env = func() {
+    # Check if we found the variable at all
+    if length(request_reason_vars) == 0 {
+        print("FOUT: CLOUDSDK_CORE_REQUEST_REASON not found in Workspace.")
+        return false
+    }
+
+    # Grab the first match (there should only be one)
+    # We use 'val' to avoid the 'undefined' trap
+    actual_var = request_reason_vars[0]
+    actual_val = actual_var.value else "UNDEFINED"
+
+    if actual_val == "UNDEFINED" {
+        print("FOUT: Unable to read value. Ensure it is not sensitive.")
+        return false
+    }
+
+    if actual_val != expected {
+        print("FOUT: Mismatch!")
+        print("  Verwacht: " + expected)
+        print("  Gekregen: " + actual_val)
+        return false
+    }
+
+    print("SUCCES: De waarde is correct!")
+    return true
+}
+
 main = rule {
-    validate_config()
+    validate_env()
 }
