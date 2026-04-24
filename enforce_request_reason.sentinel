@@ -1,69 +1,81 @@
 import "tfplan/v2" as tfplan
 
-# 1. Validation Logic
-validate_configuration = func() {
-    print("DEBUG: Starting Policy Validation...")
+# 1. Helper function to scan modules recursively for the google provider
+find_google_providers = func(module) {
+    found_providers = []
     
-    # Check CHANGE_ID
-    change_id = tfplan.variables.CHANGE_ID.value else "MISSING_IN_WORKSPACE"
-    print("DEBUG: CHANGE_ID value found: '" + change_id + "'")
+    # Check providers in the current module
+    for module.providers as _, p {
+        if p.name == "google" or p.name == "google-beta" {
+            append(found_providers, p)
+        }
+    }
     
-    if change_id == "MISSING_IN_WORKSPACE" or change_id == "" {
-        print("FOUT: CHANGE_ID must be set in the workspace.")
+    # Check sub-modules recursively
+    for module.module_calls as _, mc {
+        found_providers = found_providers + find_google_providers(mc.module)
+    }
+    
+    return found_providers
+}
+
+# 2. Validation Logic
+validate_config = func() {
+    print("DEBUG: Starting Universal Search for Google Providers...")
+    
+    # Get CHANGE_ID for validation
+    change_id = tfplan.variables.CHANGE_ID.value else ""
+    if change_id == "" {
+        print("FOUT: CHANGE_ID variable is missing or empty.")
         return false
     }
 
-    # Expected HCL string
-    expected_value = "${TFE_RUN_ID} ${var.CHANGE_ID}"
-    print("DEBUG: Looking for literal HCL string: '" + expected_value + "'")
-    
-    # Safely get providers
-    providers = tfplan.configuration.providers else {}
-    print("DEBUG: Number of provider blocks detected: " + string(length(providers)))
-    
-    found_google = false
-    all_google_providers_valid = true
+    # Locate all providers across the whole tree
+    all_providers = find_google_providers(tfplan.configuration.root_module)
+    print("DEBUG: Total Google providers found: " + string(length(all_providers)))
 
-    # 2. Iterate and Debug
-    for providers as p_address, p {
-        print("DEBUG: Processing provider at address: " + p_address)
-        print("DEBUG: Provider Name: " + (p.name else "unknown"))
+    if length(all_providers) == 0 {
+        print("FOUT: No Google provider blocks found in root or modules.")
+        return false
+    }
 
-        if p.name == "google" or p.name == "google-beta" {
-            found_google = true
-            print("DEBUG: Google provider identified. Checking attributes...")
+    all_valid = true
+
+    for all_providers as p {
+        print("DEBUG: Checking provider: " + p.name)
+        
+        # Check if request_reason exists
+        if (p.expressions.request_reason) is defined {
+            # Instead of a literal check, we check the 'references' 
+            # This proves the code is using the variables, regardless of strings
+            refs = p.expressions.request_reason.references else []
+            print("DEBUG: References found in request_reason: " + string(refs))
             
-            # Check for request_reason
-            if (p.expressions.request_reason) is defined {
-                # In configuration, strings are usually in constant_value
-                actual_value = p.expressions.request_reason.constant_value else "NOT_A_CONSTANT"
-                print("DEBUG: Found 'request_reason'. Value: '" + actual_value + "'")
-                
-                if actual_value == expected_value {
-                    print("DEBUG: Match successful for " + p_address)
-                } else {
-                    print("FOUT: Mismatch in " + p_address)
-                    print("  Expected: " + expected_value)
-                    print("  Actual:   " + actual_value)
-                    all_google_providers_valid = false
-                }
-            } else {
-                print("FOUT: 'request_reason' attribute is MISSING from provider: " + p_address)
-                all_google_providers_valid = false
+            has_run_id = false
+            has_change_id = false
+            
+            for refs as r {
+                if r contains "var.TFE_RUN_ID" { has_run_id = true }
+                if r contains "var.CHANGE_ID"   { has_change_id = true }
             }
+
+            if has_run_id and has_change_id {
+                print("SUCCES: request_reason is correctly linked to variables.")
+            } else {
+                print("FOUT: request_reason is missing required variable references.")
+                print("Required: var.TFE_RUN_ID AND var.CHANGE_ID")
+                all_valid = false
+            }
+        } else {
+            print("FOUT: 'request_reason' is NOT defined in this provider block.")
+            all_valid = false
         }
     }
 
-    # 3. Final Evaluation
-    if not found_google {
-        print("FOUT: No 'google' or 'google-beta' provider blocks found in your HCL.")
-        return false
-    }
-
-    return all_google_providers_valid
+    return all_valid
 }
 
-# Main Rule
+# 3. Main Rule
 main = rule {
-    validate_configuration()
+    validate_config()
 }
