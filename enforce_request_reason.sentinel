@@ -1,0 +1,45 @@
+import "tfrun" as tfrun
+import "tfplan/v2" as tfplan
+import "strings"
+
+# 1. Get the CHANGE_ID from the plan variables
+change_id = tfplan.variables.CHANGE_ID.value else ""
+
+# 2. Construct the exact expected string: "run-xxxxxx change-id-value"
+expected_reason = tfrun.id + " " + change_id
+
+# 3. Validation Rule
+validate_request_reason = func() {
+    found = false
+    for tfrun.variables as _, v {
+        if v.category == "env" and v.key == "CLOUDSDK_CORE_REQUEST_REASON" {
+            found = true
+            
+            # Check if it matches exactly
+            if v.value != expected_reason {
+                print("FOUT: CLOUDSDK_CORE_REQUEST_REASON format is incorrect.")
+                print("Verwacht: '" + expected_reason + "'")
+                print("Gekregen: '" + v.value + "'")
+                return false
+            }
+            
+            # Ensure change_id part isn't empty or the default
+            if change_id == "" or change_id == "blabla" {
+                print("FOUT: CHANGE_ID is missing or set to default 'blabla'.")
+                return false
+            }
+        }
+    }
+    
+    if not found {
+        print("FOUT: Environment variable 'CLOUDSDK_CORE_REQUEST_REASON' is missing.")
+        return false
+    }
+    
+    return true
+}
+
+# Main enforcement
+main = rule {
+    validate_request_reason()
+}
