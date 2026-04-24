@@ -4,7 +4,7 @@ import "tfrun"
 print("---- Sentinel Debug Output ----")
 
 # -------------------------
-# CHANGE_ID existence (config)
+# CHANGE_ID existence
 # -------------------------
 change_id_exists = false
 if "CHANGE_ID" in tfconfig.variables {
@@ -14,7 +14,7 @@ if "CHANGE_ID" in tfconfig.variables {
 print("CHANGE_ID exists in config:", change_id_exists)
 
 # -------------------------
-# Runtime value (ONLY value, no default)
+# Runtime value ONLY
 # -------------------------
 tfrun_change_id = ""
 
@@ -26,10 +26,7 @@ if "CHANGE_ID" in tfrun.variables {
 
 print("CHANGE_ID runtime value:", tfrun_change_id)
 
-change_id_runtime_valid = false
-if tfrun_change_id is not "" {
-  change_id_runtime_valid = true
-}
+change_id_runtime_valid = tfrun_change_id is not ""
 
 # -------------------------
 # Google provider check
@@ -40,14 +37,12 @@ if "google" in tfconfig.providers {
 
   for tfconfig.providers.google as p {
 
-    has_rr = false
-    if "request_reason" in p.config {
-      has_rr = true
-    }
+    has_rr = "request_reason" in p.config
 
     print("google provider request_reason present:", has_rr)
 
     if has_rr {
+
       rr_val = p.config.request_reason
       print("request_reason value:", rr_val)
 
@@ -59,10 +54,8 @@ if "google" in tfconfig.providers {
 }
 
 # -------------------------
-# FINAL RULE (NO MULTILINE EXPRESSIONS)
+# FINAL RULE (FIXED)
 # -------------------------
 main = rule {
-  change_id_exists
-  and change_id_runtime_valid
-  and google_provider_has_request_reason
+  change_id_exists and change_id_runtime_valid and google_provider_has_request_reason
 }
