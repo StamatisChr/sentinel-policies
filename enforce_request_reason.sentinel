@@ -2,17 +2,17 @@ import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
 import "strings"
 
-# 1. Get the CHANGE_ID from the plan variables
-change_id = tfplan.variables.CHANGE_ID.value else ""
+# 1. Get the change_id from the plan variables
+change_id = tfplan.variables.change_id.value else ""
 
 # 2. Construct the exact expected string
 expected_reason = tfrun.id + " " + change_id
 
 # 3. Validation Logic
 validate_env_config = func() {
-    # Check if CHANGE_ID is valid
+    # Check if change_id is valid
     if change_id == "" or change_id == "blabla" {
-        print("FOUT: CHANGE_ID is missing, empty, or still set to 'blabla'. Please update the workspace variable.")
+        print("FOUT: change_id is missing, empty, or still set to 'blabla'. Please update the workspace variable.")
         return false
     }
 
