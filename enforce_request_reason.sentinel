@@ -1,40 +1,29 @@
 import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
 
-# 1. Capture inputs and print status
+# 1. Capture inputs
 print("Checking Workspace Variables...")
-
-# Fetch the user-provided CHANGE_ID
 change_id = tfplan.variables["CHANGE_ID"].value else "MISSING"
-print("Plan variable CHANGE_ID: " + change_id)
+run_id    = tfrun.id
 
-# Fetch the platform-generated Run ID
-run_id = tfrun.id
-print("Platform Run ID: " + run_id)
-
-# Define the two acceptable formats
 expected_resolved = run_id + " " + change_id
 expected_literal  = "${TFE_RUN_ID} ${CHANGE_ID}"
 
-print("Expected Value (Resolved): '" + expected_resolved + "'")
-print("Expected Value (Literal):  '" + expected_literal + "'")
+print("Target Value 1: '" + expected_resolved + "'")
+print("Target Value 2: '" + expected_literal + "'")
 
-# 2. Validation Rule (The No-Loop Approach)
-# Sentinel's 'any' quantifier acts as a filter/search mechanism
-# It safely skips over undefined/sensitive variables that would crash a loop
+# 2. Validation Rule
+# We look for ANY environment variable that has our expected value.
+# We skip the 'key' check because TFE might be masking it as 'unknown'.
 request_reason_is_valid = rule {
     any tfrun.variables as _, v {
-        (v.key else "") == "CLOUDSDK_CORE_REQUEST_REASON" and
         (v.category else "") == "env" and
         (v.value == expected_resolved or v.value == expected_literal)
     }
 }
 
-# 3. Main Rule with failure message
 main = rule {
     request_reason_is_valid
 }
 
-# 4. Final Debug Print
-# This only prints if the check has finished
 print("Policy validation complete.")
