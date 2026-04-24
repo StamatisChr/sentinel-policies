@@ -1,51 +1,40 @@
 import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
 
-# 1. Setup - Fetch the actual IDs
-actual_run_id = tfrun.id
-actual_change_id = tfplan.variables["CHANGE_ID"].value else "MISSING"
-expected_resolved = actual_run_id + " " + actual_change_id
+# 1. Capture inputs and print status
+print("Checking Workspace Variables...")
+
+# Fetch the user-provided CHANGE_ID
+change_id = tfplan.variables["CHANGE_ID"].value else "MISSING"
+print("Plan variable CHANGE_ID: " + change_id)
+
+# Fetch the platform-generated Run ID
+run_id = tfrun.id
+print("Platform Run ID: " + run_id)
+
+# Define the two acceptable formats
+expected_resolved = run_id + " " + change_id
 expected_literal  = "${TFE_RUN_ID} ${CHANGE_ID}"
 
-print("--- DEBUG START ---")
-print("Werkelijke Run ID:  " + actual_run_id)
-print("Werkelijke Change:  " + actual_change_id)
-print("Verwachte string:   " + expected_resolved)
-print("--- VARIABLES CHECK ---")
+print("Expected Value (Resolved): '" + expected_resolved + "'")
+print("Expected Value (Literal):  '" + expected_literal + "'")
 
-validate = func() {
-    found_var = false
-    match_found = false
-
-    for tfrun.variables as _, v {
-        key = v.key else "unknown"
-        val = v.value else "unknown"
-        
-        # Print every env var so we can see what TFE is doing
-        if v.category == "env" {
-            print("Gevonden Env Var -> " + key + ": " + val)
-        }
-
-        if v.key == "CLOUDSDK_CORE_REQUEST_REASON" and v.category == "env" {
-            found_var = true
-            # Check if it matches the resolved IDs OR the literal placeholders
-            if val == expected_resolved or val == expected_literal {
-                match_found = true
-                print("RESULTAAT: Match gevonden!")
-            } else {
-                print("RESULTAAT: Waarde mismatch voor " + key)
-            }
-        }
+# 2. Validation Rule (The No-Loop Approach)
+# Sentinel's 'any' quantifier acts as a filter/search mechanism
+# It safely skips over undefined/sensitive variables that would crash a loop
+request_reason_is_valid = rule {
+    any tfrun.variables as _, v {
+        (v.key else "") == "CLOUDSDK_CORE_REQUEST_REASON" and
+        (v.category else "") == "env" and
+        (v.value == expected_resolved or v.value == expected_literal)
     }
-
-    if not found_var {
-        print("FOUT: CLOUDSDK_CORE_REQUEST_REASON is niet aanwezig in de workspace.")
-        return false
-    }
-
-    return match_found
 }
 
+# 3. Main Rule with failure message
 main = rule {
-    validate()
+    request_reason_is_valid
 }
+
+# 4. Final Debug Print
+# This only prints if the check has finished
+print("Policy validation complete.")
