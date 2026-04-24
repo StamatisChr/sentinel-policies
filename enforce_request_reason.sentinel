@@ -64,24 +64,15 @@ for google_providers as p {
 }
 
 # --- Rules ---
-change_id_exists = rule {
-  change_id_var is not null
-}
+change_id_exists = rule { change_id_var is not null }
 
 change_id_not_empty_config = rule {
-  change_id_exists and (
-    not ("default" in change_id_var) or
-    ("default" in change_id_var and change_id_var.default is not "")
-  )
+  change_id_exists and (not ("default" in change_id_var) or ("default" in change_id_var and change_id_var.default is not ""))
 }
 
-change_id_not_empty_runtime = rule {
-  tfrun_change_id is not ""
-}
+change_id_not_empty_runtime = rule { tfrun_change_id is not "" }
 
-google_provider_has_request_reason = rule {
-  provider_has_request_reason
-}
+google_provider_has_request_reason = rule { provider_has_request_reason }
 
 # --- Final rule ---
 main = rule {
@@ -91,8 +82,5 @@ main = rule {
   print("change_id_not_empty_runtime:", change_id_not_empty_runtime)
   print("google_provider_has_request_reason:", google_provider_has_request_reason)
 
-  change_id_exists and
-  change_id_not_empty_config and
-  change_id_not_empty_runtime and
-  google_provider_has_request_reason
+  change_id_exists and change_id_not_empty_config and change_id_not_empty_runtime and google_provider_has_request_reason
 }
