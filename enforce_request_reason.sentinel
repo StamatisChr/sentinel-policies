@@ -6,19 +6,26 @@ print("---- Sentinel Debug Output ----")
 # -------------------------
 # CHANGE_ID exists in config
 # -------------------------
-change_id_exists = false
-if "CHANGE_ID" in tfconfig.variables {
-  change_id_exists = true
-}
-
+change_id_exists = "CHANGE_ID" in tfconfig.variables
 print("CHANGE_ID exists in config:", change_id_exists)
 
 # -------------------------
-# Runtime value (FIXED: string, not object)
+# Runtime value (SAFE EXTRACTION)
 # -------------------------
 tfrun_change_id = ""
+
 if "CHANGE_ID" in tfrun.variables {
-  tfrun_change_id = tfrun.variables["CHANGE_ID"]
+
+  raw = tfrun.variables["CHANGE_ID"]
+
+  # If it's a map/object with value field
+  if type(raw) is "map" and "value" in raw {
+    tfrun_change_id = raw.value
+
+  # If it's already a string
+  } else if type(raw) is "string" {
+    tfrun_change_id = raw
+  }
 }
 
 print("CHANGE_ID runtime value:", tfrun_change_id)
@@ -39,6 +46,7 @@ if "google" in tfconfig.providers {
     print("google provider request_reason present:", has_rr)
 
     if has_rr {
+
       rr_val = p.config.request_reason
       print("request_reason value:", rr_val)
 
