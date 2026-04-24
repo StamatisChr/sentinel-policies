@@ -4,7 +4,7 @@ import "tfrun"
 print("---- Sentinel Debug Output ----")
 
 # -------------------------
-# CHANGE_ID existence
+# CHANGE_ID exists in config
 # -------------------------
 change_id_exists = false
 if "CHANGE_ID" in tfconfig.variables {
@@ -14,14 +14,11 @@ if "CHANGE_ID" in tfconfig.variables {
 print("CHANGE_ID exists in config:", change_id_exists)
 
 # -------------------------
-# Runtime value ONLY
+# Runtime value (FIXED: string, not object)
 # -------------------------
 tfrun_change_id = ""
-
 if "CHANGE_ID" in tfrun.variables {
-  if "value" in tfrun.variables["CHANGE_ID"] {
-    tfrun_change_id = tfrun.variables["CHANGE_ID"].value
-  }
+  tfrun_change_id = tfrun.variables["CHANGE_ID"]
 }
 
 print("CHANGE_ID runtime value:", tfrun_change_id)
@@ -42,7 +39,6 @@ if "google" in tfconfig.providers {
     print("google provider request_reason present:", has_rr)
 
     if has_rr {
-
       rr_val = p.config.request_reason
       print("request_reason value:", rr_val)
 
@@ -54,7 +50,7 @@ if "google" in tfconfig.providers {
 }
 
 # -------------------------
-# FINAL RULE (FIXED)
+# FINAL RULE
 # -------------------------
 main = rule {
   change_id_exists and change_id_runtime_valid and google_provider_has_request_reason
