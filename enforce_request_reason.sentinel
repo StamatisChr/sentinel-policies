@@ -3,29 +3,29 @@ import "tfrun"
 
 print("---- Sentinel Debug Output ----")
 
-# --- Safely load CHANGE_ID from config ---
-change_id_var = null
-if "CHANGE_ID" in tfconfig.variables {
-  change_id_var = tfconfig.variables["CHANGE_ID"]
-}
+# --- CHANGE_ID from config ---
+change_id_exists = "CHANGE_ID" in tfconfig.variables
+print("CHANGE_ID exists in config:", change_id_exists)
 
-print("CHANGE_ID defined in config:", change_id_var is not null)
+change_id_has_default = false
+change_id_default_not_empty = true
 
-# --- Check default value safely ---
-has_default = false
-default_val = "NO DEFAULT"
+if change_id_exists {
+  if "default" in tfconfig.variables["CHANGE_ID"] {
+    change_id_has_default = true
+    default_val = tfconfig.variables["CHANGE_ID"].default
 
-if change_id_var is not null {
-  if "default" in change_id_var {
-    has_default = true
-    default_val = change_id_var.default
+    print("CHANGE_ID default value:", default_val)
+
+    if default_val is "" {
+      change_id_default_not_empty = false
+    }
+  } else {
+    print("CHANGE_ID has no default")
   }
 }
 
-print("CHANGE_ID has default:", has_default)
-print("CHANGE_ID default value:", default_val)
-
-# --- Safely load runtime variable ---
+# --- Runtime արժեք ---
 tfrun_change_id = ""
 if "CHANGE_ID" in tfrun.variables {
   tfrun_change_id = tfrun.variables["CHANGE_ID"]
@@ -33,54 +33,39 @@ if "CHANGE_ID" in tfrun.variables {
 
 print("CHANGE_ID runtime value:", tfrun_change_id)
 
-# --- Safely load google providers ---
-google_providers = []
+change_id_runtime_not_empty = tfrun_change_id is not ""
+
+# --- Google provider check ---
+google_provider_has_request_reason = false
+
 if "google" in tfconfig.providers {
-  google_providers = tfconfig.providers.google
-}
 
-provider_has_request_reason = false
+  for tfconfig.providers.google as p {
 
-for google_providers as p {
+    has_rr = "request_reason" in p.config
 
-  has_rr = false
+    print("Found google provider")
+    print("  request_reason present:", has_rr)
 
-  if "request_reason" in p.config {
-    has_rr = true
-  }
+    if has_rr {
+      rr_val = p.config.request_reason
+      print("  request_reason value:", rr_val)
 
-  print("Found google provider")
-  print("  request_reason present:", has_rr)
-
-  if has_rr {
-    print("  request_reason value:", p.config.request_reason)
-
-    if p.config.request_reason is not "" {
-      provider_has_request_reason = true
+      if rr_val is not "" {
+        google_provider_has_request_reason = true
+      }
+    } else {
+      print("  request_reason value: NOT SET")
     }
-  } else {
-    print("  request_reason value: NOT SET")
   }
+} else {
+  print("No google provider found")
 }
 
-# --- Rules ---
-change_id_exists = rule { change_id_var is not null }
-
-change_id_not_empty_config = rule {
-  change_id_exists and (not ("default" in change_id_var) or ("default" in change_id_var and change_id_var.default is not ""))
-}
-
-change_id_not_empty_runtime = rule { tfrun_change_id is not "" }
-
-google_provider_has_request_reason = rule { provider_has_request_reason }
-
-# --- Final rule ---
+# --- Final rule (NO prints inside) ---
 main = rule {
-  print("---- Evaluation Results ----")
-  print("change_id_exists:", change_id_exists)
-  print("change_id_not_empty_config:", change_id_not_empty_config)
-  print("change_id_not_empty_runtime:", change_id_not_empty_runtime)
-  print("google_provider_has_request_reason:", google_provider_has_request_reason)
-
-  change_id_exists and change_id_not_empty_config and change_id_not_empty_runtime and google_provider_has_request_reason
+  change_id_exists and
+  change_id_default_not_empty and
+  change_id_runtime_not_empty and
+  google_provider_has_request_reason
 }
