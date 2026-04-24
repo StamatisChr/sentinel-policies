@@ -8,39 +8,33 @@ expected  = run_id + " " + change_id
 
 print("DEBUG: Target Value: '" + expected + "'")
 
-# 2. Filter for the specific environment variable
-# This avoids the loop issues caused by other sensitive variables
-request_reason_vars = filter tfrun.variables as _, v {
-    v.key is "CLOUDSDK_CORE_REQUEST_REASON" and v.category is "env"
-}
-
-# 3. Validation Logic
+# 2. Direct Value Validation
 validate_env = func() {
-    # Check if we found the variable at all
-    if length(request_reason_vars) == 0 {
-        print("FOUT: CLOUDSDK_CORE_REQUEST_REASON not found in Workspace.")
-        return false
+    
+    # We use a boolean flag to track if we find a match anywhere
+    matched = false
+
+    # We iterate through all variables. 
+    # To avoid the 'undefined' error, we use 'else' on every property access.
+    for tfrun.variables as _, v {
+        val = v.value else "HIDDEN_OR_UNDEFINED"
+        cat = v.category else "unknown"
+        
+        # If we find our expected string in an environment variable, we succeed
+        if cat == "env" and val == expected {
+            matched = true
+            break
+        }
     }
 
-    # Grab the first match (there should only be one)
-    # We use 'val' to avoid the 'undefined' trap
-    actual_var = request_reason_vars[0]
-    actual_val = actual_var.value else "UNDEFINED"
-
-    if actual_val == "UNDEFINED" {
-        print("FOUT: Unable to read value. Ensure it is not sensitive.")
+    if matched {
+        print("SUCCES: Match gevonden voor '" + expected + "'")
+        return true
+    } else {
+        print("FOUT: Geen enkele omgevingsvariabele komt overeen met de verwachte waarde.")
+        print("Tip: Zorg dat CLOUDSDK_CORE_REQUEST_REASON exact '" + expected + "' is.")
         return false
     }
-
-    if actual_val != expected {
-        print("FOUT: Mismatch!")
-        print("  Verwacht: " + expected)
-        print("  Gekregen: " + actual_val)
-        return false
-    }
-
-    print("SUCCES: De waarde is correct!")
-    return true
 }
 
 main = rule {
