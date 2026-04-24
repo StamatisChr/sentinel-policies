@@ -1,33 +1,31 @@
 import "tfrun" as tfrun
 import "tfplan/v2" as tfplan
 
-# 1. Prepare the values
+# 1. Capture CHANGE_ID
 change_id = tfplan.variables.CHANGE_ID.value else ""
-run_id = tfrun.id
 
-# This is exactly what TFE holds in the environment variable
-expected_literal = "${TFE_RUN_ID} ${CHANGE_ID}"
-expected_resolved = run_id + " " + change_id
+# 2. Validation Rule
+# We use 'is' for all comparisons because it handles 'undefined' safely
+request_reason_exists = rule {
+    any tfrun.variables as _, v {
+        (v.category else "") is "env" and 
+        (v.key else "") is "CLOUDSDK_CORE_REQUEST_REASON"
+    }
+}
 
-# 2. Check CHANGE_ID
 change_id_is_valid = rule {
     change_id is not ""
 }
 
-# 3. Check Environment Variable by Value
-# Since TFE masks the names (keys), we check if the VALUE exists in the env
-# This is the only way to find it when other sensitive vars are present
-request_reason_exists = rule {
-    any tfrun.variables as _, v {
-        (v.category else "") is "env" and 
-        (v.value is expected_literal or v.value is expected_resolved)
-    }
-}
-
-# 4. Main Rule
+# 3. Main Rule
+# 'is true' ensures a boolean result and prevents 'undefined' errors
 main = rule {
     (change_id_is_valid and request_reason_exists) is true
 }
 
-print("CHANGE_ID valid: " + string(change_id_is_valid))
-print("Request Reason found: " + string(request_reason_exists))
+# 4. English status prints
+print("Requirement 1: CHANGE_ID exists and is not empty...")
+print("Result: " + string(change_id_is_valid))
+
+print("Requirement 2: Env var 'CLOUDSDK_CORE_REQUEST_REASON' exists...")
+print("Result: " + string(request_reason_exists))
